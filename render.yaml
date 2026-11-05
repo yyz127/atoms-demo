@@ -1,0 +1,13 @@
+# Selected by the user: free platform, no database, no persistent disk, no public app hosting.
+services:
+  - type: web
+    name: atmos-demo
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /api/health
+    envVars:
+      - key: ATMOS_PRODUCTION
+        value: "true"
+      - key: ATMOS_PUBLISH_DURABLE
+        value: "false"
