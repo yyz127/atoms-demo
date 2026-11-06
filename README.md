@@ -43,7 +43,7 @@ OpenAI 兼容接口不再主动设置输出 token 上限；Anthropic 协议要�
 
 - render.yaml：用户已选用的免费平台方案，无磁盘、无数据库，暂不启用公开应用托管；生成、研究、版本和导出保留。
 - render-persistent.yaml：未来可选的付费计算与 1 GB 磁盘方案，本次不使用。
-- 新账号方案使用一套免费 PostgreSQL，已连接现有免费服务；数据库将于 2026-12-06 10:16（北京时间）到期。
+- 使用一套免费 PostgreSQL，已连接现有免费服务。
 
 Docker 多阶段构建会生成前端并启动 Python，默认端口使用 Render 的 PORT。生产域名自动使用 RENDER_EXTERNAL_URL，健康检查为 /api/health。
 
