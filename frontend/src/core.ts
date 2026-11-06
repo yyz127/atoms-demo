@@ -60,7 +60,9 @@ export function cloneChat(source:Chat,version:Version):Chat {
 
 export function download(name:string, content:string, type='text/html;charset=utf-8') {
   const url=URL.createObjectURL(new Blob([content],{type}));
-  const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  const a=document.createElement('a');a.href=url;a.download=name;a.hidden=true;
+  document.body.appendChild(a);
+  try{a.click()}finally{a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}
 }
 
 export function exportHtml(chat:Chat,version:Version,withData:boolean):string {

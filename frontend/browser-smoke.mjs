@@ -35,6 +35,12 @@ try{
  await page.route('**/api/run',async route=>{const body=route.request().postDataJSON();requests.push(body);const events=body.mode==='build'?[{type:'stage',text:'测试协议：生成单个 HTML'},{type:'artifact',html:html.replace('我的计数器','改进的计数器')}]:[{type:'result',text:body.mode==='plan'?'1. 保留本地数据\n2. 修改页面标题':'# 检查报告\n测试协议返回，未进行真实网络研究。'}];await route.fulfill({status:200,contentType:'text/event-stream',body:[...events,{type:'done'}].map(e=>'data: '+JSON.stringify(e)+'\n\n').join('')})});
  await page.getByLabel('描述你的需求').fill('修改计数器标题');await page.getByRole('button',{name:'发送需求'}).click();
  await waitFor(async()=>(await state()).chats.find(c=>c.id===originalId).versions.length===2);
+ await page.getByTitle('导出 HTML').click();
+ const [generatedDownload]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'下载 HTML',exact:true}).click()]);
+ await generatedDownload.saveAs(output+'/generated.html');
+ const generated=await context.newPage();await generated.goto('file://'+output+'/generated.html');
+ assert.equal(await generated.locator('h1').innerText(),'改进的计数器');await generated.locator('#add').click();
+ await generated.reload();assert.equal(await generated.locator('#count').innerText(),'1');await generated.close();
  await page.getByTitle('历史记录').click();assert.equal(await page.locator('.history-row').count(),2);await page.locator('.history-row').last().getByRole('button',{name:'恢复',exact:false}).click();
  assert.equal((await state()).chats.find(c=>c.id===originalId).activeId,(await state()).chats.find(c=>c.id===originalId).versions[0].id);
  await page.getByLabel('构建模式').selectOption('plan');await page.getByLabel('描述你的需求').fill('先给出实施计划');await page.getByRole('button',{name:'发送需求'}).click();
