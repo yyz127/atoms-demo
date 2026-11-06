@@ -210,28 +210,7 @@ def artifact_path(ident):
 
 @app.put("/api/publications/{ident}")
 async def publish(ident: str, body: Publication, request: Request):
-    rate_limit(request, "publish", 20)
-    if settings.production and not settings.publish_durable:
-        raise HTTPException(503, "此服务尚未配置持久托管空间；为避免链接在重启后丢失，暂未开启在线发布。仍可导出 HTML。")
-    try:
-        validate_files({"index.html": body.html})
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
-    path = artifact_path(ident)
-    digest = hashlib.sha256(body.secret.encode()).hexdigest()
-    async with publication_locks[ident]:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.exists():
-            existing = json.loads(path.read_text())
-            if not secrets.compare_digest(existing["owner"], digest):
-                raise HTTPException(403, "发布管理凭证不匹配")
-        elif len(list(path.parent.glob("*.json"))) >= settings.max_publications:
-            raise HTTPException(507, "托管空间已达到当前容量上限")
-        record = {"owner": digest, "html": body.html, "data": body.data, "title": body.title, "updated": time.time()}
-        temp = path.with_suffix(".tmp")
-        temp.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
-        os.replace(temp, path)
-    return {"url": settings.public_url.rstrip("/") + "/p/" + ident}
+    raise HTTPException(410, "发布功能已停用；请导出 HTML。")
 
 
 @app.get("/api/publications/{ident}")
@@ -273,7 +252,7 @@ def health():
                 database = bool(conn.execute("SELECT to_regclass('public.workspaces') IS NOT NULL").fetchone()[0])
         except Exception:
             database = False
-    return {"ok": True, "storage": "postgres-and-browser" if database else "browser-localstorage", "database": database, "publishing_enabled": not settings.production or settings.publish_durable}
+    return {"ok": True, "storage": "postgres-and-browser" if database else "browser-localstorage", "database": database, "publishing_enabled": False}
 
 
 frontend = Path(__file__).resolve().parents[1] / "frontend" / "dist"

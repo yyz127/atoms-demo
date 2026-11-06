@@ -1,4 +1,6 @@
 import json
+import hashlib
+from pathlib import Path
 import asyncio
 from types import SimpleNamespace
 import httpx
@@ -20,22 +22,22 @@ def client(tmp_path, monkeypatch):
 def test_publication_lifecycle_capability_and_seed_data(client):
     ident = "a" * 32
     body = {"html": "<!doctype html><html><body>Real app</body></html>", "title": "Test app", "secret": "owner-" * 8, "data": {"items": '["preview record"]'}}
-    assert client.put(f"/api/publications/{ident}", json=body).status_code == 200
+    assert client.put(f"/api/publications/{ident}", json=body).status_code == 410
+    path = Path(settings.publish_dir) / f"{ident}.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"owner": hashlib.sha256(body["secret"].encode()).hexdigest(), "html": body["html"], "title": body["title"], "data": body["data"], "updated": 1}))
     public = client.get(f"/api/publications/{ident}").json()
     assert public["data"] == body["data"]
     assert "owner" not in public and "secret" not in public
-    assert client.put(f"/api/publications/{ident}", json={**body, "secret": "wrong-" * 8}).status_code == 403
     assert client.post(f"/api/publications/{ident}/unpublish", json={"secret": "wrong-" * 8}).status_code == 403
     assert client.post(f"/api/publications/{ident}/unpublish", json={"secret": body["secret"]}).status_code == 200
     assert client.get(f"/api/publications/{ident}").status_code == 404
-    # A tombstone prevents outsiders reclaiming an unpublished stable URL.
-    assert client.put(f"/api/publications/{ident}", json={**body, "secret": "wrong-" * 8}).status_code == 403
-    assert client.put(f"/api/publications/{ident}", json=body).status_code == 200
+    assert client.put(f"/api/publications/{ident}", json=body).status_code == 410
 
 
 def test_invalid_artifact_and_cross_origin_requests_rejected(client):
     body = {"html": "not an html document", "title": "Invalid", "secret": "owner-" * 8}
-    assert client.put("/api/publications/" + "b" * 32, json=body).status_code == 400
+    assert client.put("/api/publications/" + "b" * 32, json=body).status_code == 410
     assert client.put("/api/publications/../secrets", json=body).status_code != 200
     assert client.post("/api/test", json={}, headers={"Origin": "https://untrusted.invalid"}).status_code == 403
     assert client.get("/api/health").json()["database"] is False
@@ -81,7 +83,7 @@ def test_free_production_disables_public_hosting(client, monkeypatch):
     monkeypatch.setattr(settings, "publish_durable", False)
     assert client.get("/api/health").json()["publishing_enabled"] is False
     body = {"html": "<!doctype html><html><body>App</body></html>", "title": "App", "secret": "x" * 40}
-    assert client.put("/api/publications/" + "c" * 32, json=body).status_code == 503
+    assert client.put("/api/publications/" + "c" * 32, json=body).status_code == 410
 
 
 async def test_research_slow_source_cannot_block_other_sources(monkeypatch):
