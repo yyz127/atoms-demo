@@ -18,3 +18,9 @@
 .recent-row .dropdown{top:30px;right:0}
 .recent-list{overflow-x:visible}
 .folder-picker{padding:20px 24px}.folder-picker .search input{width:100%;font-size:12px}.folder-picker-list{max-height:340px;overflow:auto;margin-top:12px}.folder-picker-row{display:flex;align-items:center;gap:10px;padding:10px;border-radius:7px}.folder-picker-row:hover{background:#f7f2fb}.folder-picker-row span{min-width:0;display:flex;flex-direction:column;gap:4px}.folder-picker-row b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.folder-picker-row small{color:var(--muted);font-size:10px}
+
+/* Scroll the sidebar as a single navigation surface. */
+.sidebar{overflow-y:auto;overflow-x:hidden}
+.sidebar>*,.folder-list,.recent-list{flex-shrink:0}
+.folder-list{max-height:none;overflow:visible}
+.recent-list{overflow:visible;flex:1 0 auto}
