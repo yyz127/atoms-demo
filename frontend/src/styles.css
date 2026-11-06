@@ -26,3 +26,4 @@
 .recent-list{overflow:visible;flex:1 0 auto}
 
 .data-overview p + p{margin-top:8px}
+.research-files{display:flex;gap:8px;align-items:center;overflow-x:auto;padding:10px 16px;border-bottom:1px solid #e8e8ed;font-size:12px}.research-files button{white-space:nowrap;border:0;background:transparent;padding:6px 9px;border-radius:6px;color:#62616b;cursor:pointer}.research-files button.selected{background:#eeeaff;color:#6355cf}.markdown-workspace{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}.markdown-preview,.markdown-source{flex:1;overflow:auto;padding:24px 32px;margin:0}.markdown-source{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 monospace}.stream-status{white-space:pre-wrap;max-height:240px;overflow:auto}.plan-card textarea{min-height:200px}

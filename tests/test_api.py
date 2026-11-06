@@ -127,3 +127,44 @@ async def test_saved_profile_never_returns_model_key_in_stream(client, monkeypat
     assert response.status_code == 200
     assert secret not in response.text
     assert '[redacted]' in response.text
+
+
+def test_research_requires_confirmed_plan_and_plan_never_searches(client, monkeypatch):
+    from backend import api
+    calls = []
+    async def fake_complete(profile, messages, **kwargs):
+        calls.append(messages)
+        await kwargs['on_delta']('# 研究计划\n目标、范围、问题、检索方向、报告结构')
+        return '# 研究计划\n目标、范围、问题、检索方向、报告结构'
+    async def forbidden(*args):
+        raise AssertionError('planning must not search')
+    monkeypatch.setattr(api, 'complete', fake_complete)
+    monkeypatch.setattr(api, 'gather_sources', forbidden)
+    profile = {'provider':'custom','protocol':'openai','base_url':'https://model.invalid','model':'test','key':'key'}
+    assert client.post('/api/run', json={'profile':profile,'mode':'research','prompt':'topic'}).status_code == 400
+    result = client.post('/api/run', json={'profile':profile,'mode':'research_plan','prompt':'topic'})
+    assert '研究计划' in result.text and '"type": "done"' in result.text
+    assert len(calls) == 1
+
+
+def test_research_uses_confirmed_plan_and_records_sources(client, monkeypatch):
+    from backend import api
+    calls, queries = [], []
+    async def fake_complete(profile, messages, **kwargs):
+        calls.append(messages[0]['content'])
+        if 'on_delta' not in kwargs:
+            return '["specific query", "failed query"]'
+        await kwargs['on_delta']('发现 [1](https://example.com)')
+        return '发现 [1](https://example.com)'
+    async def gather(query, log):
+        queries.append(query)
+        if query == 'failed query':
+            raise ValueError('搜索不可用')
+        return [{'title':'A','url':'https://example.com','content':'正文','read':True}, {'title':'B','url':'https://example.org','content':'摘要','read':False}]
+    monkeypatch.setattr(api, 'complete', fake_complete)
+    monkeypatch.setattr(api, 'gather_sources', gather)
+    profile = {'provider':'custom','protocol':'openai','base_url':'https://model.invalid','model':'test','key':'secret'}
+    result = client.post('/api/run', json={'profile':profile,'mode':'research','prompt':'topic','plan':'最终计划：只研究水资源'})
+    assert queries == ['specific query','failed query']
+    assert all('最终计划：只研究水资源' in x for x in calls)
+    assert '仅读取搜索摘要' in result.text and '搜索不可用' in result.text and '"type": "done"' in result.text

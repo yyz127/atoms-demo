@@ -56,3 +56,11 @@ node browser-smoke.mjs
 - 临时 PGlite PostgreSQL 兼容库：实际运行迁移 SQL 和 API，验证两个账号记录及模型隔离、独立会话跨客户端读取、版本冲突、密钥加密和退出。PGlite 不替代 Render PostgreSQL 的实际验证。
 - Resend：向账号邮箱实际发送过验证邮件，并在临时数据库验证浏览器绑定、一次性消费与退出。测试链接已失效；测试发件域只能用于受限测试。
 - 2026-11-06：Render 部署 551b2bc 为 live；首页 HTTP 200，健康检查 database=true、publishing_enabled=false，启动日志正常。真实注册邮箱通过两个独立浏览器验证一次性邮箱链接、同账号读取和退出；临时模型配置未返回明文 Key 并已删除。真实迁移排除游客 Key 和预览业务数据，另一会话可读取，临时记录已清理。Render 数据库保持内网，不具备直接密文检查；不同账号隔离及密文检查已在本机兼容库验证。当前仅 Resend 注册邮箱可接收测试邮件。
+
+
+## 2026-11-06 深度研究和 Markdown 验证
+
+- `npm --prefix frontend run build`：TypeScript 与生产构建通过；`node --experimental-strip-types --test core.test.ts`：6 项通过。
+- `UV_CACHE_DIR=/tmp/atmos-uv-cache uv run python -m pytest -q`：19 项通过，2 项 PostgreSQL 集成测试因环境未配置而跳过。包含确认前不检索、最终计划传入检索与报告、来源读取状态及部分检索失败的模拟测试。
+- `node frontend/research-smoke.mjs`：本地浏览器使用模拟流式服务，验证计划生成、直接与对话修改、刷新保留、确认后使用最终计划、报告与 HTML 版本隔离、Markdown 源码和下载一致、预览不执行脚本、历史消息报告、跨对话引用、失败重试入口及停止不保存不完整报告。
+- 浏览器测试使用协议模拟，未执行真实供应商模型或外部搜索；未对账号数据库进行本次端到端验证。截取既有浏览器回归脚本中发布步骤之前的部分运行通过，覆盖 HTML 交互预览、两种导出、版本恢复和实施计划确认；未验证已停用的发布流程。

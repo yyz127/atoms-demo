@@ -9,7 +9,7 @@ export async function api(path:string, body?:unknown, method='POST') {
   return response.json();
 }
 function note(runId:string,text:string){change(s=>{const r=s.runs.find(x=>x.id===runId);if(r){r.events=[...r.events.slice(-99),text]}})}
-export function stopRun(id:string){controllers.get(id)?.abort();change(s=>{const r=s.runs.find(x=>x.id===id);if(r&&['running','awaiting_plan'].includes(r.status)){r.status='cancelled';r.ended=Date.now()}const c=s.chats.find(x=>x.id===r?.chatId);if(c)delete c.plan;});}
+export function stopRun(id:string){controllers.get(id)?.abort();change(s=>{const r=s.runs.find(x=>x.id===id);if(r&&['running','awaiting_plan'].includes(r.status)){r.status='cancelled';r.ended=Date.now()}const c=s.chats.find(x=>x.id===r?.chatId);if(c&&r?.mode==='plan')delete c.plan;});}
 export function stopSchedule(id:string){for(const r of getState().runs.filter(x=>x.scheduleId===id&&x.status==='running'))stopRun(r.id);}
 
 async function stream(body:unknown,signal:AbortSignal,receive:(e:any)=>void){
@@ -29,7 +29,8 @@ export async function runChat(chatId:string,prompt:string,mode:string,profileId:
   const id=uid(),controller=new AbortController();controllers.set(id,controller);
   localStorage.setItem('atmos.run.'+id,String(Date.now()+10000));
   const base=activeVersion(chat)?.html||'';
-  change(s=>{s.runs.unshift({id,chatId,scheduleId:options.scheduleId,mode,prompt,status:'running',created:Date.now(),events:['任务已启动']});const c=s.chats.find(x=>x.id===chatId)!;if(mode!=='check'&&!options.plan)c.messages.push({id:uid(),role:'user',kind:'text',content:prompt,created:Date.now(),runId:id});c.updated=Date.now();delete c.plan;if(c.title==='新的想法')c.title=prompt.slice(0,32);});
+  if(mode==='research'&&!options.plan?.trim())throw Error('请先确认研究计划');
+  change(s=>{s.runs.unshift({id,chatId,scheduleId:options.scheduleId,mode,prompt,status:'running',created:Date.now(),events:['任务已启动']});const c=s.chats.find(x=>x.id===chatId)!;if(mode!=='check'&&(mode==='research_plan'||!options.plan))c.messages.push({id:uid(),role:'user',kind:'text',content:prompt,created:Date.now(),runId:id});c.updated=Date.now();if(mode==='build'||mode==='plan')delete c.plan;if(c.title==='新的想法')c.title=prompt.slice(0,32);});
   const guard=setInterval(()=>{localStorage.setItem('atmos.run.'+id,String(Date.now()+10000));const r=getState().runs.find(r=>r.id===id),c=getState().chats.find(c=>c.id===chatId);if(!r||r.status!=='running'||!c||c.deleted)controller.abort();},750);
   let text='',html='',versionId='',lastUi=0;
   const context=(chat.messages.filter(m=>m.kind!=='check').slice(-12).map(m=>`${m.role}: ${m.content.slice(0,3000)}`).join('\n')+'\n'+chat.references.map(id=>state.chats.flatMap(c=>c.messages).find(m=>m.id===id)?.content||'').join('\n')+(mode==='check'?'\n当前浏览器中本应用的只读预览数据：\n'+JSON.stringify(chat.previewData).slice(0,16000):'')).slice(0,80000);
@@ -55,10 +56,11 @@ export async function runChat(chatId:string,prompt:string,mode:string,profileId:
     }
     if(controller.signal.aborted)throw new DOMException('Stopped','AbortError');
     change(s=>{const r=s.runs.find(x=>x.id===id)!;if(r.status!=='running')return;
-      const c=s.chats.find(x=>x.id===chatId)!;r.status=mode==='plan'?'awaiting_plan':'succeeded';r.ended=Date.now();c.updated=Date.now();
-      if(mode==='plan')c.plan={text,prompt,profileId};
+      const c=s.chats.find(x=>x.id===chatId)!;r.status=(mode==='plan'||mode==='research_plan')?'awaiting_plan':'succeeded';r.ended=Date.now();c.updated=Date.now();
+      if(mode==='research_plan'){const old=c.researchPlan;const docId=old?.documentId||uid();c.documents=c.documents||[];const doc={id:docId,name:'research-plan.md',kind:'plan' as const,content:text,created:Date.now(),runId:id};c.documents=old?c.documents.map(d=>d.id===docId?doc:d):[...c.documents,doc];if(old){const prior=s.runs.find(x=>x.id===old.runId);if(prior?.status==='awaiting_plan')prior.status='succeeded'}c.researchPlan={documentId:docId,prompt:old?.prompt||prompt,profileId,runId:id};}
+      else if(mode==='plan')c.plan={text,prompt,profileId};
       else if(mode==='build'){c.activeId=versionId;c.messages.push({id:uid(),role:'assistant',kind:'text',content:`已生成 v${c.versions.find(v=>v.id===versionId)!.number}。可切换代码与预览，继续描述需求即可迭代。`,created:Date.now(),runId:id});}
-      else c.messages.push({id:uid(),role:'assistant',kind:mode==='check'?'check':'research',content:text,created:Date.now(),runId:id});
+      else {const messageId=uid();c.messages.push({id:messageId,role:'assistant',kind:mode==='check'?'check':'research',content:text,created:Date.now(),runId:id});if(mode==='research'){c.documents=c.documents||[];c.documents.push({id:messageId,name:'research-report.md',kind:'report',content:text,created:Date.now(),runId:id});const waiting=s.runs.find(x=>x.id===c.researchPlan?.runId);if(waiting?.status==='awaiting_plan')waiting.status='succeeded';delete c.researchPlan;}}
       if(options.scheduleId&&options.notifySuccess)s.notices.unshift({id:uid(),title:'定时检查已完成：'+prompt.slice(0,35),chatId,created:Date.now(),read:false});
     });
   }catch(error){

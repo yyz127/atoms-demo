@@ -9,7 +9,7 @@ class ModelError(Exception):
     pass
 
 
-async def complete(credential, messages, *, system="", max_tokens=12000, on_delta=None):
+async def complete(credential, messages, *, system="", max_tokens=None, on_delta=None):
     key = credential.key
     anthropic = credential.protocol == "anthropic"
     endpoint = credential.base_url.rstrip("/") + ("/messages" if anthropic else "/chat/completions")
@@ -17,13 +17,14 @@ async def complete(credential, messages, *, system="", max_tokens=12000, on_delt
     headers.update({"Content-Type": "application/json"})
     if anthropic:
         headers.update({"x-api-key": key, "anthropic-version": "2023-06-01"})
-        body = {"model": credential.model, "messages": messages, "max_tokens": max_tokens, "stream": True}
+        body = {"model": credential.model, "messages": messages, "max_tokens": max_tokens or 64000, "stream": True}
         if system:
             body["system"] = system
     else:
         headers["Authorization"] = f"Bearer {key}"
         body = {"model": credential.model, "messages": ([{"role": "system", "content": system}] if system else []) + messages, "stream": True}
-        body["max_completion_tokens" if credential.provider == "openai" else "max_tokens"] = max_tokens
+        if max_tokens is not None:
+            body["max_completion_tokens" if credential.provider == "openai" else "max_tokens"] = max_tokens
         if credential.provider == "deepseek":
             # Flash enables thinking by default. The interactive builder needs
             # its bounded output budget for the actual HTML, not hidden reasoning.
@@ -62,15 +63,13 @@ async def complete(credential, messages, *, system="", max_tokens=12000, on_delt
                         finish = choice.get("finish_reason") or finish
                     if delta:
                         output.append(delta)
-                        if sum(map(len, output[-20:])) > 200000 or len(output) > 50000:
-                            raise ModelError("模型输出超过本次运行大小限制")
                         if on_delta:
                             await on_delta(delta)
     except httpx.HTTPError:
         raise ModelError("连接模型服务失败或超时，请检查地址与网络后重试") from None
     result = "".join(output)
     if finish in {"length", "max_tokens"}:
-        raise ModelError("模型输出达到长度限制，请缩小本轮需求后重试")
+        raise ModelError("模型服务达到其输出上限，内容未完成；请重试或更换支持更长输出的模型")
     if not result.strip():
         raise ModelError("模型没有返回可用内容，请检查该模型是否支持文本生成")
     return result
