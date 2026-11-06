@@ -7,13 +7,14 @@ from backend.config import settings
 
 
 def test_unconfigured_auth_and_removed_google_login_fail_closed(monkeypatch):
-    monkeypatch.setattr(settings, 'resend_api_key', '')
+    monkeypatch.setattr(settings, 'database_url', '')
     limits.clear()
     with TestClient(app) as client:
         assert client.get('/api/auth/me').status_code == 401
         assert client.get('/api/auth/google/start').status_code == 404
         assert client.get('/api/auth/google/callback?state=forged&code=forged').status_code == 404
-        assert client.post('/api/auth/email', json={'email': 'person@example.com'}).status_code == 503
+        assert client.post('/api/auth/register', json={'email': 'person@example.com', 'password': 'long-enough-password'}).status_code == 503
+        assert client.post('/api/auth/email', json={'email': 'person@example.com'}).status_code in (404, 405)
         assert client.get('/api/workspace').status_code == 401
         assert client.get('/api/profiles').status_code == 401
 
@@ -40,64 +41,67 @@ def test_key_encryption_and_redirect_validation(monkeypatch):
     assert accounts.safe_path('/?chat=1#section') == '/?chat=1#section'
 
 
-def test_email_registration_and_login_require_browser_bound_one_time_link(monkeypatch):
-    from urllib.parse import parse_qs, urlsplit
-    tokens, users, sessions, links = {}, {}, {}, []
-
+def test_password_registration_login_and_legacy_protection(monkeypatch):
+    users, sessions = {}, {}
+    legacy_id = uuid.uuid4()
+    users['legacy@example.com'] = (legacy_id, None)
     class Cursor:
         def __init__(self, row=None): self.row = row
         def fetchone(self): return self.row
-
     class Connection:
         def __enter__(self): return self
         def __exit__(self, *_): pass
         def execute(self, sql, params):
-            if sql.startswith('INSERT INTO email_tokens'):
-                token, email, browser, expires, path = params
-                tokens[token] = (email, browser, expires, path)
-            elif sql.startswith('DELETE FROM email_tokens') and 'RETURNING' in sql:
-                token, browser = params
-                item = tokens.get(token)
-                if item and item[1] == browser and item[2] > accounts.now():
-                    del tokens[token]
-                    return Cursor((item[0], item[3]))
-            elif sql.startswith('SELECT id FROM users'):
-                return Cursor((users[params[0]],) if params[0] in users else None)
-            elif sql.startswith('INSERT INTO users'):
-                uid, email = params
-                users.setdefault(email, uid)
-            elif sql.startswith('INSERT INTO sessions'):
+            if sql.startswith('INSERT INTO users'):
+                uid, email, hashed = params
+                if email in users: return Cursor()
+                users[email] = (uid, hashed)
+                return Cursor((uid,))
+            if sql.startswith('SELECT id,password_hash'):
+                return Cursor(users.get(params[0]))
+            if sql.startswith('INSERT INTO sessions'):
                 token, uid, expires = params
-                sessions[token] = (uid, expires)
+                sessions[token] = uid
             elif sql.startswith('DELETE FROM sessions'):
                 sessions.pop(params[0], None)
-            else:
-                raise AssertionError(sql)
+            elif sql.startswith('SELECT u.id,u.email'):
+                uid = sessions.get(params[0])
+                return Cursor(next(((u, email) for email, (u, _) in users.items() if u == uid), None))
+            elif sql.startswith('SELECT password_hash IS NULL'):
+                return Cursor(next(((hashed is None,) for uid, hashed in users.values() if uid == params[0]), None))
+            elif sql.startswith('UPDATE users SET password_hash'):
+                hashed, uid = params
+                for email, (u, old) in users.items():
+                    if u == uid and old is None:
+                        users[email] = (uid, hashed)
+                        return Cursor((uid,))
             return Cursor()
-
-    async def fake_send(key, sender, email, link, attempt_id, template_id):
-        assert key == 'test-only' and sender == 'test@example.com'
-        links.append(link)
-
-    monkeypatch.setattr(settings, 'resend_api_key', 'test-only')
-    monkeypatch.setattr(settings, 'email_from', 'test@example.com')
     monkeypatch.setattr(accounts, 'db', Connection)
-    monkeypatch.setattr(accounts, 'send_login_link', fake_send)
     limits.clear()
-    with TestClient(app, follow_redirects=False) as first, TestClient(app, follow_redirects=False) as second:
-        assert first.post('/api/auth/email', json={'email': 'PERSON@gmail.com'}).status_code == 200
-        token = parse_qs(urlsplit(links[-1]).query)['token'][0]
-        assert second.get('/api/auth/email/verify', params={'token': token}).status_code == 400
-        assert first.get('/api/auth/email/verify', params={'token': token}).status_code == 303
-        assert first.cookies.get('atmos_session')
-        assert first.get('/api/auth/email/verify', params={'token': token}).status_code == 400
-        assert len(users) == 1
-        uid = users['person@gmail.com']
-        assert second.post('/api/auth/email', json={'email': 'person@gmail.com'}).status_code == 200
-        token2 = parse_qs(urlsplit(links[-1]).query)['token'][0]
-        assert second.get('/api/auth/email/verify', params={'token': token2}).status_code == 303
-        assert len(users) == 1 and users['person@gmail.com'] == uid
-        assert len(sessions) == 2
+    with TestClient(app) as a, TestClient(app) as b:
+        invalid = a.post('/api/auth/register', json={'email':'person@example.com','password':'short'})
+        assert invalid.status_code == 400 and 'short' not in invalid.text
+        body = {'email': 'PERSON@example.com', 'password': 'correct-horse-battery'}
+        assert a.post('/api/auth/register', json=body).status_code == 200
+        assert users['person@example.com'][1] != body['password']
+        assert body['password'] not in users['person@example.com'][1]
+        assert b.post('/api/auth/register', json=body).status_code == 409
+        assert b.post('/api/auth/login', json={**body, 'password':'incorrect-password'}).status_code == 401
+        assert b.post('/api/auth/login', json=body).status_code == 200
+        assert a.get('/api/auth/me').json()['id'] == b.get('/api/auth/me').json()['id']
+        assert a.post('/api/auth/logout').status_code == 200
+        assert a.get('/api/auth/me').status_code == 401
+        assert b.get('/api/auth/me').status_code == 200
+        assert a.post('/api/auth/register', json={'email':'legacy@example.com', 'password':body['password']}).status_code == 409
+        assert a.post('/api/auth/login', json={'email':'legacy@example.com', 'password':body['password']}).status_code == 401
+        assert a.post('/api/auth/set-password', json={'password':body['password']}).status_code == 401
+        sessions[accounts.digest('legacy-session')] = legacy_id
+        a.cookies.set('atmos_session', 'legacy-session')
+        assert a.get('/api/auth/me').json()['needs_password'] is True
+        assert a.post('/api/auth/set-password', json={'password':body['password']}).status_code == 200
+        assert a.post('/api/auth/set-password', json={'password':'another-password'}).status_code == 409
+        assert b.post('/api/auth/login', json={'email':'legacy@example.com','password':body['password']}).status_code == 200
+        assert b.get('/api/auth/me').json()['id'] == str(legacy_id)
 
 
 async def test_resend_retry_reuses_idempotency_key(monkeypatch):

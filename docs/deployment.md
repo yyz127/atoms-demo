@@ -4,7 +4,7 @@
 
 ## 目标架构与迁移
 
-浏览器 → FastAPI 认证/数据接口 → 一套 PostgreSQL。会话使用随机令牌、HttpOnly cookie，数据库存令牌哈希；平台账号统一使用邮箱验证注册和登录，不提供 Google 第三方登录。使用 Resend 官方 Python 异步 SDK 发送 15 分钟有效、一次性的验证链接，并绑定发起请求的浏览器；新邮箱验证后创建账号，已注册邮箱验证后登录。服务端使用 Fernet 加密模型 Key，只返回末四位。工作空间以 user_id 隔离、版本号检测并发修改。生成应用的业务数据不写云端；游客本地工作空间保持独立，旧数据迁移须先预览、确认并追加而不覆盖。
+浏览器 → FastAPI 认证/数据接口 → 一套 PostgreSQL。账号使用邮箱与密码注册、登录，不发送邮件，也不验证邮箱归属；密码使用随机盐的 PBKDF2-SHA256 哈希保存，不保存明文。会话使用随机令牌、HttpOnly cookie，数据库存令牌哈希。旧邮箱验证账号必须在仍已登录的浏览器设置密码，不能仅凭邮箱接管；无有效会话时目前没有自助找回。模型 Key 使用 Fernet 加密，工作空间按 user_id 隔离并检测并发修改。游客工作空间与生成应用业务数据保持本地，旧数据迁移须预览确认。
 
 运行 `uv run python -m backend.migrate` 创建初始表及索引。此命令必须在配置数据库之后运行。Render Free 不提供预部署命令或远程 Shell；Docker 启动入口在配置数据库时会自动执行幂等迁移，失败则停止启动并提示，不依赖外部连接。当前初始 SQL 已在本机 PGlite PostgreSQL 兼容库验收，尚未在 Render PostgreSQL 验收。定时任务仍仅页面打开期间执行。
 
@@ -15,9 +15,7 @@
 - `ATMOS_DATABASE_URL`：PostgreSQL 连接字符串，或使用 `DATABASE_URL`。
 - `ATMOS_ENCRYPTION_KEY`：持久保存的 Fernet 密钥，可用 `python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'` 生成；丢失或替换会导致原模型 Key 无法解密。
 - `ATMOS_PUBLIC_URL`：实际 HTTPS 站点地址，不能以斜杠结尾；Render 可使用 `RENDER_EXTERNAL_URL` 默认值。
-- `ATMOS_RESEND_API_KEY`、`ATMOS_EMAIL_FROM`、`ATMOS_RESEND_TEMPLATE_ID`：Resend API Key、已验证发件地址和已发布的登录邮件模板 ID；邮箱回调为 `https://<实际站点域名>/api/auth/email/verify`。此前部署域名对应 `https://atmos-demo-9uuv.onrender.com/api/auth/email/verify`。需在发起验证的同一浏览器打开链接。缺少配置时返回错误，不能假装发送成功。`onboarding@resend.dev` 仅用于给 Resend 账户自己的邮箱做测试；面向其他用户需验证自有发件域名。
 
-Render 免费 Web Service 无法对外连接 SMTP 常用端口，故使用 HTTPS 邮件 API；邮件供应商的实际免费额度与发件域验证需另行核实，当前不创建付费服务。
 
 ## 免费 PostgreSQL 限制
 
@@ -26,3 +24,5 @@ Render 免费 Web Service 无法对外连接 SMTP 常用端口，故使用 HTTPS
 ## 验收状态
 
 2026-11-06 已在 My Workspace 创建 `atmos-demo-postgres`，Free、Singapore、PostgreSQL 18，创建后 30 天到期：北京时间 2026-12-06 10:16。账号代码部署 551b2bc，状态 live；Web Service 已通过内部地址连接数据库，健康检查报告 database=true。线上使用两个隔离浏览器完成真实邮箱验证、同账号记录读取、退出与临时模型配置检查；实际迁移排除游客密钥及预览业务数据，临时验收记录已清理。真实 Resend 仅验证向注册邮箱发信；其他用户需要已验证发件域名。不同账号隔离和密文存储在本机 PostgreSQL 兼容测试库验证，未在 Render 数据库直接读取密文。原有公开托管仍不自动启用。
+
+当前代码已改为邮箱密码方案；历史线上测试使用的邮件登录描述仅供参考，部署新版本后不再发送登录邮件。部署前请在仍有效的旧登录会话中设置密码；没有有效会话的旧账号需要由管理员安全地另行恢复，不能自动认领。

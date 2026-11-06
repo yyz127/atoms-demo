@@ -50,7 +50,7 @@ function Viewer({id,privateVersion}:{id:string;privateVersion?:string}){
 }
 
 function App(){
- const state=useStore();const account=getAccount(),syncStatus=useSyncStatus();const [login,setLogin]=useState(false);const [page,setPage]=useState(location.hash.includes('chat=')?'chat':'home'),[chatId,setChatId]=useState<string|null>(new URLSearchParams(location.hash.slice(1)).get('chat'));
+ const state=useStore();const account=getAccount(),syncStatus=useSyncStatus();const [login,setLogin]=useState(false),[setPassword,setSetPassword]=useState(!!account?.needs_password);const [page,setPage]=useState(location.hash.includes('chat=')?'chat':'home'),[chatId,setChatId]=useState<string|null>(new URLSearchParams(location.hash.slice(1)).get('chat'));
  const [sidebar,setSidebar]=useState(window.innerWidth>600),[settings,setSettings]=useState(false),[history,setHistory]=useState(false),[exporting,setExporting]=useState(false),[publishing,setPublishing]=useState(false),[notices,setNotices]=useState(false);
  const [scheduleEdit,setScheduleEdit]=useState<Schedule|'new'|null>(null),[scheduleHistory,setScheduleHistory]=useState<string|null>(null),[report,setReport]=useState<any>(null);
  const [versionId,setVersionId]=useState<string|null>(null),[tab,setTab]=useState('preview'),[mobile,setMobile]=useState('chat'),[viewport,setViewport]=useState('desktop');
@@ -100,6 +100,7 @@ function App(){
  {page==='trash'&&!chat&&<section className="page-section"><div className="page-heading"><div><span className="overline">A SECOND CHANCE</span><h1>回收站</h1><p>恢复项目，继续之前的想法。</p></div></div>{state.chats.some(c=>c.deleted)?<div className="trash-list">{state.chats.filter(c=>c.deleted).map(c=><div className="trash-row" key={c.id}><FileCode2 size={22}/><div><b>{c.title}</b><p>{c.versions.length} 个版本 · 已下线</p></div><button className="button secondary" onClick={()=>{change(s=>{s.chats.find(x=>x.id===c.id)!.deleted=false});notify('已恢复，定时任务仍保持暂停')} }><ArchiveRestore size={15}/>恢复</button><button className="icon danger" title="永久删除" onClick={()=>{if(confirm('永久删除“'+c.title+'”及全部聊天、版本和预览数据？此操作无法恢复。'))change(s=>{s.chats=s.chats.filter(x=>x.id!==c.id);s.schedules=s.schedules.filter(x=>x.chatId!==c.id);s.runs=s.runs.filter(x=>x.chatId!==c.id);s.notices=s.notices.filter(x=>x.chatId!==c.id)})}}><Trash2 size={16}/></button></div>)}</div>:<div className="empty"><Trash2/><h3>回收站是空的</h3><p>移入回收站的项目会显示在这里。</p></div>}</section>}
  </main>
  {login&&<LoginModal close={()=>setLogin(false)} notify={notify}/>}
+ {setPassword&&<SetPasswordModal close={()=>setSetPassword(false)} notify={notify}/>}
  {settings&&<SettingsModal close={()=>setSettings(false)} notify={notify}/>}
  {history&&chat&&<Modal title="历史记录" subtitle="每轮生成一个新版本，随时查看与恢复。" onClose={()=>setHistory(false)} wide><div className="history-list">{[...chat.versions].reverse().map(v=><div key={v.id} className={'history-row '+(version?.id===v.id?'selected':'')}><div className="history-icon"><FileCode2 size={23}/></div><div><b>{v.title}</b><p>{date(v.created)} · <span className={v.status==='ready'?'success-text':'danger'}>{v.status==='ready'?'语法检查通过':'检查未通过'}</span></p><span className="version-number">v{v.number}{chat.activeId===v.id?' · 当前版本':''}</span></div><div className="history-actions"><button className="button secondary small" onClick={()=>{setVersionId(v.id);setHistory(false);setTab('code');setMobile('app')}}>查看</button><button className="button secondary small" disabled={v.status!=='ready'||!!running} onClick={()=>{change(s=>{const c=s.chats.find(c=>c.id===chat.id)!;c.activeId=v.id;c.messages.push({id:uid(),role:'assistant',kind:'system',content:`已恢复到 v${v.number}，后续构建以此为基础，预览数据保留。`,created:Date.now()})});setVersionId(v.id);setHistory(false);notify('版本已恢复')}}><ArchiveRestore size={13}/>恢复</button></div></div>)}{!chat.versions.length&&<div className="empty"><History/><h3>还没有代码版本</h3><p>生成或导入 HTML 后自动保存。</p></div>}</div></Modal>}
  {exporting&&chat&&version&&<ExportModal chat={chat} version={version} close={()=>setExporting(false)}/>}
@@ -113,9 +114,15 @@ function App(){
 }
 
 function LoginModal({close,notify}:{close:()=>void;notify:(t:string)=>void}){
- const [email,setEmail]=useState(''),[busy,setBusy]=useState(false),[sent,setSent]=useState(false);
- async function submit(e:React.FormEvent){e.preventDefault();setBusy(true);try{await api('/auth/email',{email,return_path:location.pathname+location.search+location.hash});setSent(true)}catch(e){notify(errorText(e))}finally{setBusy(false)}}
- return <Modal title="邮箱登录 / 注册" subtitle="新邮箱验证后自动注册；已有账号验证后登录。" onClose={close}><form onSubmit={submit} className="settings-body"><label>邮箱<input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></label><p className="fine-print">验证链接 15 分钟有效，请在发起登录的同一浏览器打开。</p>{sent&&<p>验证邮件已提交发送，请检查收件箱。</p>}<button className="button primary" disabled={busy}>{busy?'发送中…':'发送验证邮件'}</button></form></Modal>
+ const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[busy,setBusy]=useState(false),[register,setRegister]=useState(false);
+ async function submit(e:React.FormEvent){e.preventDefault();setBusy(true);try{await api(register?'/auth/register':'/auth/login',{email,password});location.reload()}catch(e){notify(errorText(e))}finally{setBusy(false)}}
+ return <Modal title={register?'注册账号':'邮箱登录'} subtitle="邮箱不会经过验证，请妥善保管密码。" onClose={close}><form onSubmit={submit} className="settings-body"><label>邮箱<input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="name@example.com"/></label><label>密码<input type="password" required minLength={10} maxLength={256} autoComplete={register?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)}/></label><p className="fine-print">密码至少 10 个字符。当前不支持邮箱找回密码。</p><button className="button primary" disabled={busy}>{busy?'处理中…':register?'注册并登录':'登录'}</button><button type="button" className="button secondary" onClick={()=>setRegister(!register)}>{register?'已有账号？去登录':'没有账号？注册'}</button></form></Modal>
+}
+
+function SetPasswordModal({close,notify}:{close:()=>void;notify:(t:string)=>void}){
+ const [password,setPassword]=useState(''),[busy,setBusy]=useState(false);
+ async function submit(e:React.FormEvent){e.preventDefault();setBusy(true);try{await api('/auth/set-password',{password});location.reload()}catch(e){notify(errorText(e))}finally{setBusy(false)}}
+ return <Modal title="为现有账号设置密码" subtitle="旧的邮件登录即将停用，请在当前已登录设备设置密码后再退出。" onClose={close}><form onSubmit={submit} className="settings-body"><label>新密码<input type="password" autoComplete="new-password" required minLength={10} maxLength={256} value={password} onChange={e=>setPassword(e.target.value)}/></label><p className="fine-print">密码至少 10 个字符；当前不支持邮箱找回。</p><button className="button primary" disabled={busy}>{busy?'保存中…':'设置密码'}</button></form></Modal>
 }
 
 function SettingsModal({close,notify}:{close:()=>void;notify:(s:string)=>void}){

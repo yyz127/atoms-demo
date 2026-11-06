@@ -62,27 +62,21 @@ def test_postgres_accounts_data_profiles_and_logout(database, monkeypatch):
         assert b.get('/api/auth/me').status_code==200
 
 
-def test_real_email_verification_on_disposable_database(database):
-    import json, re, subprocess, time
-    from urllib.parse import urlsplit
-    recipient = os.getenv('ATMOS_TEST_RESEND_TO')
-    if not recipient:
-        pytest.skip('set ATMOS_TEST_RESEND_TO to the Resend account email for a real send')
+
+def test_password_registration_on_disposable_database(database):
+    email = f'{uuid.uuid4()}@example.invalid'
+    password = 'integration-password-only'
     limits.clear()
-    with TestClient(app, follow_redirects=False) as first, TestClient(app, follow_redirects=False) as other:
-        response = first.post('/api/auth/email', json={'email':recipient,'return_path':'/?test=1'})
-        assert response.status_code==200
-        def cli(*args):
-            result=subprocess.run(['npx','--yes','resend-cli@latest',*args,'--json'],capture_output=True,text=True,timeout=40,check=True)
-            return json.loads(result.stdout)
-        items=cli('emails','list','--limit','5')['data']
-        match=next(item for item in items if item['subject']=='Atmos 登录链接' and recipient in item['to'])
-        mail=cli('emails','get',match['id'])
-        match_url=re.search(r'http://localhost:8000/api/auth/email/verify\?token=[A-Za-z0-9_-]+', mail['text'])
-        assert match_url is not None
-        url=urlsplit(match_url.group())
-        assert other.get(url.path+'?'+url.query).status_code==400
-        assert first.get(url.path+'?'+url.query).status_code==303
-        assert first.get('/api/auth/me').json()['email']==recipient.lower()
-        assert first.get(url.path+'?'+url.query).status_code==400
-        assert first.post('/api/auth/logout').status_code==200
+    try:
+        with TestClient(app) as first, TestClient(app) as second:
+            assert first.post('/api/auth/register', json={'email':email, 'password':password}).status_code == 200
+            assert second.post('/api/auth/login', json={'email':email, 'password':password}).status_code == 200
+            assert first.get('/api/auth/me').json()['id'] == second.get('/api/auth/me').json()['id']
+            with accounts.db() as conn:
+                stored = conn.execute('SELECT password_hash FROM users WHERE email=%s', (email,)).fetchone()[0]
+            assert password not in stored and accounts.password_matches(password, stored)
+            assert first.post('/api/auth/logout').status_code == 200
+            assert second.get('/api/auth/me').status_code == 200
+    finally:
+        with accounts.db() as conn:
+            conn.execute('DELETE FROM users WHERE email=%s', (email,))

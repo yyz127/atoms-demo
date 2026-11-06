@@ -1,6 +1,6 @@
 # Atmos
 
-一个对话式 HTML 应用构建平台。最新需求为平台账号与 PostgreSQL 云工作空间；前后端已接入，并已部署至 Render；邮箱发信当前仅支持 Resend 测试账户邮箱。
+一个对话式 HTML 应用构建平台。最新需求为平台账号与 PostgreSQL 云工作空间；前后端已接入，并已部署至 Render；当前认证改为邮箱和密码，不发送验证邮件；部署状态以实际环境为准。
 
 通过自己的 OpenAI、Anthropic、DeepSeek、通义千问、Kimi 或兼容接口生成单个 HTML，支持实时预览、代码查看、版本恢复、克隆、带数据/空模板导出、研究报告和页面打开期间的定时检查。
 
@@ -41,7 +41,7 @@ uv run uvicorn backend.api:app --host 127.0.0.1 --port 8000
 
 Docker 多阶段构建会生成前端并启动 Python，默认端口使用 Render 的 PORT。生产域名自动使用 RENDER_EXTERNAL_URL，健康检查为 /api/health。
 
-免费服务可能休眠并在下次访问时冷启动。部署步骤、连接和当前状态见 [部署说明](docs/deployment.md)。源码仓库为 https://github.com/yyz127/atoms-demo 。账号版本已部署，线上邮箱登录和工作空间基本流程已验证。
+免费服务可能休眠并在下次访问时冷启动。部署步骤、连接和当前状态见 [部署说明](docs/deployment.md)。源码仓库为 https://github.com/yyz127/atoms-demo 。此前账号版本已部署，密码登录版本需要部署后再验收。
 
 ## 验证
 

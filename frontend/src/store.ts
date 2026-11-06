@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { emptyState, type State, type Profile } from './core';
 export const STORAGE_KEY='atmos.workspace.v1';
-type Account={id:string;email:string};
+type Account={id:string;email:string;needs_password:boolean};
 let account:Account|null=null;
 let revision=0, pending=false, saving=false, migrating=false, syncError='', state:State=loadGuest();
 const listeners=new Set<()=>void>();

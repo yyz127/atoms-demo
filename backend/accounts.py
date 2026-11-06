@@ -6,16 +6,11 @@ import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urlencode
-
-import httpx
-from resend.exceptions import ResendError
-from .mail import send_login_link
 import psycopg
 from psycopg.types.json import Jsonb
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from .config import settings
 
@@ -37,6 +32,7 @@ def db():
 def migrate():
     with db() as conn:
         conn.execute((Path(__file__).parent / 'migrations/0001_accounts.sql').read_text())
+        conn.execute((Path(__file__).parent / 'migrations/0002_passwords.sql').read_text())
 
 def digest(token):
     return hashlib.sha256(token.encode()).hexdigest()
@@ -81,14 +77,19 @@ def establish(response, uid, previous=""):
         conn.execute('INSERT INTO sessions VALUES (%s,%s,%s)', (digest(token), uid, now()+timedelta(days=14)))
     response.set_cookie(COOKIE, token, httponly=True, secure=origin().startswith('https://'), samesite='lax', max_age=14*86400, path='/')
 
-def login_email(email):
-    with db() as conn:
-        row = conn.execute('SELECT id FROM users WHERE email=%s', (email,)).fetchone()
-        if row:
-            return row[0]
-        uid = uuid.uuid4()
-        conn.execute('INSERT INTO users (id,email) VALUES (%s,%s) ON CONFLICT (email) DO NOTHING', (uid,email))
-        return conn.execute('SELECT id FROM users WHERE email=%s', (email,)).fetchone()[0]
+def password_hash(password, salt=None):
+    salt = salt or secrets.token_hex(16)
+    value = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), 600_000).hex()
+    return f'pbkdf2_sha256$600000${salt}${value}'
+
+def password_matches(password, stored):
+    try:
+        algorithm, iterations, salt, value = stored.split('$')
+        if algorithm != 'pbkdf2_sha256' or iterations != '600000':
+            return False
+        return secrets.compare_digest(password_hash(password, salt), stored)
+    except (ValueError, AttributeError):
+        return False
 
 @router.get('/auth/me')
 def me(request: Request):
@@ -100,7 +101,9 @@ def me(request: Request):
         response = JSONResponse({'detail': exc.detail}, status_code=401)
         response.delete_cookie(COOKIE, path='/')
         return response
-    return {'id':str(uid),'email':email}
+    with db() as conn:
+        row = conn.execute('SELECT password_hash IS NULL FROM users WHERE id=%s', (uid,)).fetchone()
+    return {'id':str(uid),'email':email,'needs_password':bool(row[0])}
 
 @router.post('/auth/logout')
 def logout(request: Request, response: Response):
@@ -111,45 +114,63 @@ def logout(request: Request, response: Response):
     response.delete_cookie(COOKIE, path='/')
     return {'ok':True}
 
-class EmailInput(BaseModel):
+class PasswordInput(BaseModel):
     email: str = Field(max_length=254)
-    return_path: str = '/'
+    password: str
 
-@router.post('/auth/email')
-async def email_start(body: EmailInput, request: Request, response: Response):
-    from .api import rate_limit
-    rate_limit(request, 'email', 5, 300)
-    email=body.email.strip().lower()
+def check_password_length(password):
+    if not 10 <= len(password) <= 256:
+        raise HTTPException(400, '密码长度须为 10 至 256 个字符')
+
+def normalized_email(email):
+    email = email.strip().lower()
     if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', email):
         raise HTTPException(400, '请输入有效邮箱')
-    key, sender = config('RESEND_API_KEY'), config('EMAIL_FROM')
-    if not key or not sender:
-        raise HTTPException(503, '邮件服务尚未配置')
-    token=secrets.token_urlsafe(32)
-    browser=secrets.token_urlsafe(32)
-    with db() as conn:
-        conn.execute('INSERT INTO email_tokens VALUES (%s,%s,%s,%s,%s)',(digest(token),email,digest(browser),now()+timedelta(minutes=15),safe_path(body.return_path)))
-    link=origin()+'/api/auth/email/verify?'+urlencode({'token':token})
-    try:
-        await send_login_link(key, sender, email, link, digest(token), config('RESEND_TEMPLATE_ID'))
-    except (ResendError, httpx.HTTPError, ValueError):
-        with db() as conn:
-            conn.execute('DELETE FROM email_tokens WHERE token_hash=%s',(digest(token),))
-        raise HTTPException(502, '验证邮件发送失败，请稍后重试')
-    response.set_cookie('atmos_email_flow', browser, httponly=True, secure=origin().startswith('https://'), samesite='lax', max_age=900, path='/api/auth/email/verify')
-    return {'ok':True}
+    return email
 
-@router.get('/auth/email/verify')
-def email_verify(token: str, request: Request):
+@router.post('/auth/register')
+def register(body: PasswordInput, request: Request, response: Response):
+    from .api import rate_limit
+    rate_limit(request, 'register', 5, 300)
+    email = normalized_email(body.email)
+    check_password_length(body.password)
+    uid = uuid.uuid4()
     with db() as conn:
-        browser=request.cookies.get('atmos_email_flow','')
-        row=conn.execute('DELETE FROM email_tokens WHERE token_hash=%s AND browser_hash=%s AND expires_at>now() RETURNING email,return_path',(digest(token),digest(browser))).fetchone()
+        row = conn.execute('INSERT INTO users (id,email,password_hash) VALUES (%s,%s,%s) ON CONFLICT (email) DO NOTHING RETURNING id', (uid,email,password_hash(body.password))).fetchone()
     if not row:
-        raise HTTPException(400,'验证链接无效、已使用或已过期')
-    response=RedirectResponse(safe_path(row[1]),status_code=303)
-    response.delete_cookie("atmos_email_flow",path="/api/auth/email/verify")
-    establish(response,login_email(row[0]),request.cookies.get(COOKIE,""))
-    return response
+        raise HTTPException(409, '该邮箱已有账号，请登录；旧账号需在已登录的设备上设置密码')
+    establish(response, uid, request.cookies.get(COOKIE, ''))
+    return {'ok': True}
+
+@router.post('/auth/login')
+def password_login(body: PasswordInput, request: Request, response: Response):
+    from .api import rate_limit
+    rate_limit(request, 'login', 10, 300)
+    email = normalized_email(body.email)
+    check_password_length(body.password)
+    with db() as conn:
+        row = conn.execute('SELECT id,password_hash FROM users WHERE email=%s', (email,)).fetchone()
+    dummy = 'pbkdf2_sha256$600000$00000000000000000000000000000000$' + '0'*64
+    valid = password_matches(body.password, row[1] if row and row[1] else dummy)
+    if not row or not valid:
+        raise HTTPException(401, '邮箱或密码不正确；旧账号请在已登录的设备上设置密码')
+    establish(response, row[0], request.cookies.get(COOKIE, ''))
+    return {'ok': True}
+
+class SetPasswordInput(BaseModel):
+    password: str
+
+@router.post('/auth/set-password')
+def set_initial_password(body: SetPasswordInput, request: Request):
+    from .api import rate_limit
+    rate_limit(request, 'set-password', 5, 300)
+    uid, _ = user(request)
+    check_password_length(body.password)
+    with db() as conn:
+        row = conn.execute('UPDATE users SET password_hash=%s WHERE id=%s AND password_hash IS NULL RETURNING id', (password_hash(body.password), uid)).fetchone()
+    if not row:
+        raise HTTPException(409, '账号已经设置密码')
+    return {'ok': True}
 
 class Workspace(BaseModel):
     revision: int = Field(ge=0)
