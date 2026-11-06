@@ -147,13 +147,16 @@ def password_login(body: PasswordInput, request: Request, response: Response):
     from .api import rate_limit
     rate_limit(request, 'login', 10, 300)
     email = normalized_email(body.email)
-    check_password_length(body.password)
+    if len(body.password) > 256:
+        raise HTTPException(400, '密码长度不能超过 256 个字符')
     with db() as conn:
         row = conn.execute('SELECT id,password_hash FROM users WHERE email=%s', (email,)).fetchone()
     dummy = 'pbkdf2_sha256$600000$00000000000000000000000000000000$' + '0'*64
     valid = password_matches(body.password, row[1] if row and row[1] else dummy)
-    if not row or not valid:
-        raise HTTPException(401, '邮箱或密码不正确；旧账号请在已登录的设备上设置密码')
+    if not row:
+        return JSONResponse({'code': 'email_not_registered', 'detail': '该邮箱尚未注册，请先注册'}, status_code=404)
+    if not valid:
+        return JSONResponse({'code': 'invalid_credentials', 'detail': '账号或密码错误'}, status_code=401)
     establish(response, row[0], request.cookies.get(COOKIE, ''))
     return {'ok': True}
 

@@ -86,7 +86,10 @@ def test_password_registration_login_and_legacy_protection(monkeypatch):
         assert users['person@example.com'][1] != body['password']
         assert body['password'] not in users['person@example.com'][1]
         assert b.post('/api/auth/register', json=body).status_code == 409
-        assert b.post('/api/auth/login', json={**body, 'password':'incorrect-password'}).status_code == 401
+        missing = b.post('/api/auth/login', json={**body, 'email':'missing@example.com'})
+        assert missing.status_code == 404 and missing.json()['code'] == 'email_not_registered'
+        wrong = b.post('/api/auth/login', json={**body, 'password':'short'})
+        assert wrong.status_code == 401 and wrong.json()['code'] == 'invalid_credentials'
         assert b.post('/api/auth/login', json=body).status_code == 200
         assert a.get('/api/auth/me').json()['id'] == b.get('/api/auth/me').json()['id']
         assert a.post('/api/auth/logout').status_code == 200
