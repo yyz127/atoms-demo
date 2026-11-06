@@ -1,7 +1,7 @@
 import { Temporal } from '@js-temporal/polyfill';
 import { parse } from 'acorn';
 
-export type Profile = {id:string; name:string; provider:string; protocol:string; base_url:string; model:string; key:string};
+export type Profile = {id:string; name:string; provider:string; protocol:string; base_url:string; model:string; key:string; key_last4?:string};
 export type Version = {id:string; number:number; title:string; html:string; created:number; status:'ready'|'failed'; error?:string};
 export type Message = {id:string; role:'user'|'assistant'; kind:'text'|'research'|'check'|'system'; content:string; created:number; runId?:string};
 export type Chat = {id:string; title:string; folderId:string|null; favorite:boolean; deleted:boolean; created:number; updated:number; versions:Version[]; activeId:string|null; messages:Message[]; previewData:Record<string,string>; publication?:{id:string; secret:string; url:string; versionId:string}; plan?:{text:string; prompt:string; profileId:string}; references:string[]};

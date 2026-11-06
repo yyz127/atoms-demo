@@ -15,10 +15,17 @@ certifi==2026.10.23
     # via
     #   httpcore
     #   httpx
+    #   requests
+cffi==2.1.1 ; platform_python_implementation != 'PyPy'
+    # via cryptography
+charset-normalizer==3.5.2
+    # via requests
 click==8.5.0
     # via
     #   ddgs
     #   uvicorn
+cryptography==46.0.7
+    # via atmos-studio
 ddgs==9.16.1
     # via atmos-studio
 fastapi==0.162.0
@@ -37,12 +44,19 @@ idna==3.20
     # via
     #   anyio
     #   httpx
+    #   requests
 lxml==6.1.3
     # via ddgs
 opentelemetry-api==1.45.2
     # via fastapi
 primp==2.0.1
     # via ddgs
+psycopg==3.3.8
+    # via atmos-studio
+psycopg-binary==3.3.8 ; implementation_name != 'pypy'
+    # via psycopg
+pycparser==3.12 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+    # via cffi
 pydantic==2.14.3
     # via
     #   fastapi
@@ -59,6 +73,10 @@ python-dotenv==1.2.4
     #   uvicorn
 pyyaml==6.0.3
     # via uvicorn
+requests==2.34.2
+    # via resend
+resend==2.52.0
+    # via atmos-studio
 six==1.17.0
     # via python-dateutil
 soupsieve==4.0.1
@@ -71,9 +89,11 @@ typing-extensions==4.16.0
     #   beautifulsoup4
     #   fastapi
     #   opentelemetry-api
+    #   psycopg
     #   pydantic
     #   pydantic-core
     #   pydantic-settings
+    #   resend
     #   starlette
     #   typing-inspection
 typing-inspection==0.4.5
@@ -81,6 +101,10 @@ typing-inspection==0.4.5
     #   fastapi
     #   pydantic
     #   pydantic-settings
+tzdata==2026.6 ; sys_platform == 'win32'
+    # via psycopg
+urllib3==2.8.0
+    # via requests
 uvicorn==0.54.0
     # via atmos-studio
 uvloop==0.23.0 ; platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'

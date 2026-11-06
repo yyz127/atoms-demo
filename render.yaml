@@ -1,4 +1,4 @@
-# Selected by the user: free platform, no database, no persistent disk, no public app hosting.
+# Free web service; the separately provisioned free database uses environment variables.
 services:
   - type: web
     name: atmos-demo

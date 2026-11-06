@@ -6,4 +6,4 @@
 - [部署说明](docs/deployment.md)：Render 资源、配置、费用与访问条件。
 - [领域术语](CONTEXT.md)、[架构决策](docs/adr/)、[历史访谈](docs/decision-history.md)。
 
-当前状态：本地功能已实现并通过构建及浏览器验证；DeepSeek Flash 已通过真实模型与生成产物交互验证。无账号、无后端数据库。用户已选择免费 Render，暂不启用公开应用托管。源码仓库为 https://github.com/yyz127/atoms-demo ，Render 连接与线上部署尚未完成，尚无在线 Demo 链接。
+当前状态：2026-11-06 需求要求平台账号与 PostgreSQL 云工作空间，覆盖此前仅本地的决定。前后端已接入，临时兼容数据库与模拟浏览器测试已完成；Render 数据库连接和端到端验收尚未完成。现有免费 Render Web Service 已部署，当前变更未部署；暂不启用公开应用托管。源码仓库为 https://github.com/yyz127/atoms-demo 。

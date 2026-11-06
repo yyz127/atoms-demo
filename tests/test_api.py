@@ -39,7 +39,7 @@ def test_invalid_artifact_and_cross_origin_requests_rejected(client):
     assert client.put("/api/publications/../secrets", json=body).status_code != 200
     assert client.post("/api/test", json={}, headers={"Origin": "https://untrusted.invalid"}).status_code == 403
     assert client.get("/api/health").json()["database"] is False
-    assert client.get("/api/auth/me").status_code == 404
+    assert client.get("/api/auth/me").status_code == 401
 
 
 @pytest.mark.parametrize("protocol,provider", [("openai", "custom"), ("anthropic", "anthropic"), ("openai", "deepseek")])
@@ -109,3 +109,19 @@ async def test_research_slow_source_cannot_block_other_sources(monkeypatch):
     assert cancelled.is_set()
     assert sources[0]["read"] is False and sources[0]["content"] == "Search summary"
     assert sources[1]["read"] is True and sources[1]["content"] == "Actual page text"
+
+
+async def test_saved_profile_never_returns_model_key_in_stream(client, monkeypatch):
+    from backend import api
+    secret = 'private-model-secret'
+    profile = SimpleNamespace(key=secret, provider='openai', protocol='openai', base_url='https://example.com', model='test')
+    monkeypatch.setattr(api, 'resolve_profile', lambda request, ident: profile)
+    async def fake_complete(profile, messages, **kwargs):
+        await kwargs['on_delta']('result: private-model-')
+        await kwargs['on_delta']('secret')
+        return 'result: ' + secret
+    monkeypatch.setattr(api, 'complete', fake_complete)
+    response = client.post('/api/run', json={'profile_id':'personal','mode':'plan','prompt':'test'})
+    assert response.status_code == 200
+    assert secret not in response.text
+    assert '[redacted]' in response.text

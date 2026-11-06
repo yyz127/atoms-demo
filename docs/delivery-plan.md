@@ -1,6 +1,6 @@
 # 最终交付方案与实现状态
 
-本文件按最后一次需求调整重写。当前架构为 **React 平台 + 无数据库 Python 代理 + LocalStorage**，生成产物为 **单个 HTML**。完整当前需求见 [requirements.md](requirements.md)。
+本文件下方为历史交付计划。2026-11-06 新需求改为 React + FastAPI + PostgreSQL 平台账号与云工作空间；生成产物仍为单个 HTML，业务数据留在访问者浏览器。新方案尚在实现中，完整当前需求见 [requirements.md](requirements.md)。
 
 ## 使用流程
 

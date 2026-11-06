@@ -1,7 +1,7 @@
 ---
-status: accepted
+status: superseded by 2026-11-06 account and cloud workspace requirements
 ---
 
-# 平台数据使用 LocalStorage，Python 仅做无数据库代理
+# 历史决策：平台数据使用 LocalStorage（已被 2026-11-06 新需求替代）
 
 用户最新明确平台也不做账号、不做后端数据库，全部工作空间数据保存在浏览器 LocalStorage；该决定替代此前云端账号同步及数据库方案。用户同时确认保留不存工作空间数据的 Python 服务，处理模型接口跨域和真实网络研究，因此不承诺跨浏览器同步、关闭页面后继续生成或服务端保管模型密钥。用户允许的服务器持久内容仅为主动发布的 HTML、可选预览数据和发布管理所必需的哈希元数据。

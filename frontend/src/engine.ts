@@ -1,10 +1,10 @@
-import {change,getState} from './store';
+import {change,getState,getAccount} from './store';
 import {uid,nextTime,validateHtml,activeVersion,type Chat,type Schedule,type Run} from './core';
 const controllers=new Map<string,AbortController>();
 const boot=Date.now();
 const tab=uid();
 export async function api(path:string, body?:unknown, method='POST') {
-  const response=await fetch('/api'+path,{method,headers:{'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
+  const response=await fetch('/api'+path,{method,headers:{'Content-Type':'application/json',...(getAccount()?{'X-Atmos-User':getAccount()!.id}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});
   if(!response.ok){const error=await response.json().catch(()=>({detail:'服务连接失败'}));throw new Error(typeof error.detail==='string'?error.detail:'请求参数无效，请检查设置');}
   return response.json();
 }
@@ -13,7 +13,7 @@ export function stopRun(id:string){controllers.get(id)?.abort();change(s=>{const
 export function stopSchedule(id:string){for(const r of getState().runs.filter(x=>x.scheduleId===id&&x.status==='running'))stopRun(r.id);}
 
 async function stream(body:unknown,signal:AbortSignal,receive:(e:any)=>void){
-  const response=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});
+  const response=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json',...(getAccount()?{'X-Atmos-User':getAccount()!.id}:{})},body:JSON.stringify(body),signal});
   if(!response.ok){const e=await response.json().catch(()=>({detail:'无法连接 Python 服务'}));throw Error(typeof e.detail==='string'?e.detail:'请求被拒绝');}
   const reader=response.body!.getReader(),decoder=new TextDecoder();let buffer='',finished=false;
   while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});let end;
@@ -24,7 +24,7 @@ async function stream(body:unknown,signal:AbortSignal,receive:(e:any)=>void){
 
 export async function runChat(chatId:string,prompt:string,mode:string,profileId:string,options:{plan?:string;scheduleId?:string;notifySuccess?:boolean;notifyFailure?:boolean}={}){
   const state=getState(),chat=state.chats.find(c=>c.id===chatId),profile=state.profiles.find(p=>p.id===profileId);
-  if(!chat||chat.deleted)throw Error('对话不存在');if(!profile?.key)throw Error('请先配置可用的模型 API Key');
+  if(!chat||chat.deleted)throw Error('对话不存在');if(!profile||(!getAccount()&&!profile.key))throw Error('请先配置可用的模型 API Key');
   if(state.runs.some(r=>r.chatId===chatId&&r.status==='running'))throw Error('此对话已有运行中的任务，请先停止或等待完成');
   const id=uid(),controller=new AbortController();controllers.set(id,controller);
   localStorage.setItem('atmos.run.'+id,String(Date.now()+10000));
@@ -36,7 +36,7 @@ export async function runChat(chatId:string,prompt:string,mode:string,profileId:
   try {
     for(let attempt=0;attempt<=3;attempt++){
       text='';html='';
-      await stream({profile,mode,prompt:attempt?prompt+'\n请修复上次HTML的语法错误：'+getState().chats.find(c=>c.id===chatId)?.versions.find(v=>v.id===versionId)?.error:prompt,html:attempt?getState().chats.find(c=>c.id===chatId)?.versions.find(v=>v.id===versionId)?.html:base,context,plan:options.plan||''},controller.signal,event=>{
+      await stream({...(getAccount()?{profile_id:profile.id}:{profile}),mode,prompt:attempt?prompt+'\n请修复上次HTML的语法错误：'+getState().chats.find(c=>c.id===chatId)?.versions.find(v=>v.id===versionId)?.error:prompt,html:attempt?getState().chats.find(c=>c.id===chatId)?.versions.find(v=>v.id===versionId)?.html:base,context,plan:options.plan||''},controller.signal,event=>{
         if(controller.signal.aborted)throw new DOMException('Stopped','AbortError');
         if(event.type==='stage')note(id,event.text);
         if(event.type==='sources')note(id,`取得 ${event.sources.length} 个来源，其中 ${event.sources.filter((x:any)=>x.read).length} 个已读正文`);
