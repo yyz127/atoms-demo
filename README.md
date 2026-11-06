@@ -35,9 +35,7 @@ OpenAI 兼容接口不再主动设置输出 token 上限；Anthropic 协议要�
 
 生成应用在隔离 iframe 内运行，预览数据独立保存；HTML 导出可带预览数据或使用空模板，独立打开后仍用自己的 LocalStorage 保存后续记录。
 
-模型凭证不进入应用 HTML 或代码版本。发布功能已停用，可通过导出 HTML 分享；已有发布链接仍可访问，并可在项目菜单或删除对话时下线。云端模型密钥加密保存在服务端。
-
-定时任务功能已移除。
+模型凭证不进入应用 HTML 或代码版本。可通过导出 HTML 分享；已有发布链接仍可访问，并可在项目菜单或删除对话时下线。云端模型密钥加密保存在服务端。
 
 ## 部署到 Render
 
@@ -49,7 +47,7 @@ OpenAI 兼容接口不再主动设置输出 token 上限；Anthropic 协议要�
 
 Docker 多阶段构建会生成前端并启动 Python，默认端口使用 Render 的 PORT。生产域名自动使用 RENDER_EXTERNAL_URL，健康检查为 /api/health。
 
-免费服务可能休眠并在下次访问时冷启动。部署步骤、连接和当前状态见 [部署说明](docs/deployment.md)。源码仓库为 https://github.com/yyz127/atoms-demo 。此前账号版本已部署，密码登录版本需要部署后再验收。
+免费服务可能休眠并在下次访问时冷启动。部署步骤、连接和当前状态见 [部署说明](docs/deployment.md)。源码仓库为 https://github.com/yyz127/atoms-demo 。
 
 ## 验证
 
