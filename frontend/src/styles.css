@@ -24,3 +24,5 @@
 .sidebar>*,.folder-list,.recent-list{flex-shrink:0}
 .folder-list{max-height:none;overflow:visible}
 .recent-list{overflow:visible;flex:1 0 auto}
+
+.data-overview p + p{margin-top:8px}
