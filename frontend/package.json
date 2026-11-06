@@ -9,7 +9,6 @@
     "typecheck": "tsc -b"
   },
   "dependencies": {
-    "@js-temporal/polyfill": "^0.5.1",
     "acorn": "^8.15.0",
     "fflate": "^0.8.2",
     "lucide-react": "^0.468.0",

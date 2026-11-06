@@ -168,3 +168,10 @@ def test_research_uses_confirmed_plan_and_records_sources(client, monkeypatch):
     assert queries == ['specific query','failed query']
     assert all('最终计划：只研究水资源' in x for x in calls)
     assert '仅读取搜索摘要' in result.text and '搜索不可用' in result.text and '"type": "done"' in result.text
+
+
+def test_removed_check_mode_is_rejected(client):
+    profile = {"provider": "custom", "protocol": "openai", "base_url": "https://model.invalid", "model": "test", "key": "key"}
+    response = client.post("/api/run", json={"profile": profile, "mode": "check", "prompt": "test"})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "无效运行模式"

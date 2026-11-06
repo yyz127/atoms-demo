@@ -6,7 +6,7 @@
 
 浏览器 → FastAPI 认证/数据接口 → 一套 PostgreSQL。账号使用邮箱与密码注册、登录，不发送邮件，也不验证邮箱归属；密码使用随机盐的 PBKDF2-SHA256 哈希保存，不保存明文。会话使用随机令牌、HttpOnly cookie，数据库存令牌哈希。旧邮箱验证账号必须在仍已登录的浏览器设置密码，不能仅凭邮箱接管；无有效会话时目前没有自助找回。模型 Key 使用 Fernet 加密，工作空间按 user_id 隔离并检测并发修改。游客工作空间与生成应用业务数据保持本地，旧数据迁移须预览确认。
 
-运行 `uv run python -m backend.migrate` 创建初始表及索引。此命令必须在配置数据库之后运行。Render Free 不提供预部署命令或远程 Shell；Docker 启动入口在配置数据库时会自动执行幂等迁移，失败则停止启动并提示，不依赖外部连接。当前初始 SQL 已在本机 PGlite PostgreSQL 兼容库验收，尚未在 Render PostgreSQL 验收。定时任务仍仅页面打开期间执行。
+运行 `uv run python -m backend.migrate` 创建初始表及索引。此命令必须在配置数据库之后运行。Render Free 不提供预部署命令或远程 Shell；Docker 启动入口在配置数据库时会自动执行幂等迁移，失败则停止启动并提示，不依赖外部连接。当前初始 SQL 已在本机 PGlite PostgreSQL 兼容库验收，尚未在 Render PostgreSQL 验收。定时任务功能已移除。
 
 ## 配置项
 

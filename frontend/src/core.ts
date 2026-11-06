@@ -1,4 +1,3 @@
-import { Temporal } from '@js-temporal/polyfill';
 import { parse } from 'acorn';
 
 export type Profile = {id:string; name:string; provider:string; protocol:string; base_url:string; model:string; key:string; key_last4?:string};
@@ -7,30 +6,11 @@ export type Message = {id:string; role:'user'|'assistant'; kind:'text'|'research
 export type ResearchDocument = {id:string; name:string; kind:'plan'|'report'; content:string; created:number; runId?:string};
 export type Chat = {id:string; title:string; folderId:string|null; favorite:boolean; deleted:boolean; created:number; updated:number; versions:Version[]; activeId:string|null; messages:Message[]; previewData:Record<string,string>; publication?:{id:string; secret:string; url:string; versionId:string}; plan?:{text:string; prompt:string; profileId:string}; researchPlan?:{documentId:string; prompt:string; profileId:string; runId:string}; documents?:ResearchDocument[]; references:string[]};
 export type Run = {id:string; chatId:string; scheduleId?:string; mode:string; prompt:string; status:'running'|'awaiting_plan'|'succeeded'|'failed'|'cancelled'|'missed'|'skipped'; created:number; ended?:number; events:string[]; error?:string};
-export type Schedule = {id:string; chatId:string; name:string; prompt:string; profileId:string; frequency:'hourly'|'daily'|'weekly'|'monthly'|'yearly'; timezone:string; at:string; weekday:number; day:number; month:number; paused:boolean; next:number; notifySuccess:boolean; notifyFailure:boolean};
-export type State = {schema:1; profiles:Profile[]; profileId:string; chats:Chat[]; folders:{id:string;name:string}[]; runs:Run[]; schedules:Schedule[]; notices:{id:string; title:string; chatId?:string; created:number; read:boolean}[]};
+export type State = {schema:1; profiles:Profile[]; profileId:string; chats:Chat[]; folders:{id:string;name:string}[]; runs:Run[]; notices:{id:string; title:string; chatId?:string; created:number; read:boolean}[]};
 export const uid = () => crypto.randomUUID().replaceAll('-','');
-export const emptyState = ():State => ({schema:1,profiles:[],profileId:'',chats:[],folders:[],runs:[],schedules:[],notices:[]});
+export const emptyState = ():State => ({schema:1,profiles:[],profileId:'',chats:[],folders:[],runs:[],notices:[]});
 export const newChat = (title='新的想法',folderId:string|null=null):Chat => ({id:uid(),title,folderId,favorite:false,deleted:false,created:Date.now(),updated:Date.now(),versions:[],activeId:null,messages:[],previewData:{},references:[]});
 export const activeVersion = (chat?:Chat) => chat?.versions.find(v=>v.id===chat.activeId);
-export const frequencyNames = {hourly:'每小时',daily:'每天',weekly:'每周',monthly:'每月',yearly:'每年'};
-
-export function nextTime(s:Pick<Schedule,'frequency'|'timezone'|'at'|'weekday'|'day'|'month'>, after=Date.now()):number {
-  const local = Temporal.Instant.fromEpochMilliseconds(after).toZonedDateTimeISO(s.timezone);
-  const [hour,minute] = s.at.split(':').map(Number);
-  for(let i=0;i<370;i++) {
-    let date=local.toPlainDate();
-    let h=hour;
-    if(s.frequency==='hourly') {const c=local.add({hours:i}); date=c.toPlainDate(); h=c.hour;}
-    else if(s.frequency==='daily'||s.frequency==='weekly') {date=date.add({days:i}); if(s.frequency==='weekly' && date.dayOfWeek-1!==s.weekday) continue;}
-    else if(s.frequency==='monthly') {const first=date.with({day:1}).add({months:i});date=first.with({day:Math.min(s.day,first.daysInMonth)});}
-    else {const first=Temporal.PlainDate.from({year:local.year+i,month:s.month,day:1});date=first.with({day:Math.min(s.day,first.daysInMonth)});}
-    const candidate=Temporal.ZonedDateTime.from({timeZone:s.timezone,year:date.year,month:date.month,day:date.day,hour:h,minute},{disambiguation:'compatible'});
-    if(candidate.epochMilliseconds>after) return candidate.epochMilliseconds;
-  }
-  throw new Error('无法计算下次执行时间');
-}
-
 export function validateHtml(html:string):void {
   if(!/<html[\s>]/i.test(html)||!/<\/html\s*>/i.test(html)) throw new Error('需要完整的 HTML 文档');
   if(new TextEncoder().encode(html).length>2_000_000) throw new Error('HTML 超过 2 MB');

@@ -56,20 +56,11 @@ try{
  await page.locator('nav').getByRole('button',{name:'项目',exact:false}).click();await page.getByRole('button',{name:'项目操作'}).first().click();await page.getByRole('button',{name:'克隆',exact:true}).click();
  const clone=(await state()).chats.find(c=>c.id!==originalId);assert.equal(clone.messages.length,0);assert.deepEqual(clone.previewData,{});assert.equal(clone.versions.length,1);assert.equal(clone.publication,undefined);
  await page.frameLocator('iframe[title="应用实时预览"]').locator('#count').waitFor();assert.equal(await page.frameLocator('iframe[title="应用实时预览"]').locator('#count').innerText(),'0');
- // Schedule creation, pause, resume, deletion and history retention.
- await page.getByTitle('对话自动化设置').click();await page.getByLabel('任务名称',{exact:true}).fill('定时检查测试');await page.getByLabel('每次运行要检查的内容').fill('检查公开文档并汇报');await page.getByRole('button',{name:'保存任务'}).click();
- await page.locator('nav').getByRole('button',{name:'定时任务',exact:true}).click();await page.getByTitle('暂停',{exact:true}).click();assert.equal((await state()).schedules[0].paused,true);await page.getByTitle('恢复',{exact:true}).click();assert.equal((await state()).schedules[0].paused,false);
- // Trigger due during this page's lifetime, and verify checks cannot create versions.
- const countBefore=(await state()).chats.find(c=>c.id===clone.id).versions.length;
- await page.evaluate(()=>{const key='atmos.workspace.v1',s=JSON.parse(localStorage.getItem(key));s.schedules[0].next=Date.now()-5;localStorage.setItem(key,JSON.stringify(s));window.dispatchEvent(new StorageEvent('storage',{key}))});
- await waitFor(async()=>(await state()).runs.some(r=>r.mode==='check'&&r.status==='succeeded'));
- assert.equal((await state()).chats.find(c=>c.id===clone.id).versions.length,countBefore);
- page.once('dialog',d=>d.accept());await page.getByTitle('删除任务').click();assert.equal((await state()).schedules.length,0);assert.ok((await state()).runs.some(r=>r.mode==='check'));
- // Reload with an overdue task: record missed, do not run in the background.
- const profileId=(await state()).profileId;
- await page.evaluate(({profileId,chatId})=>{const key='atmos.workspace.v1',s=JSON.parse(localStorage.getItem(key));s.schedules.push({id:'missed-test',chatId,name:'错过执行',prompt:'Check',profileId,frequency:'daily',timezone:'Asia/Shanghai',at:'09:00',weekday:0,day:1,month:1,paused:false,next:Date.now()-60000,notifySuccess:true,notifyFailure:true});localStorage.setItem(key,JSON.stringify(s))},{profileId,chatId:clone.id});
- const checksBefore=requests.filter(r=>r.mode==='check').length;await page.reload();await waitFor(async()=>(await state()).runs.some(r=>r.scheduleId==='missed-test'&&r.status==='missed'));assert.equal(requests.filter(r=>r.mode==='check').length,checksBefore);
+ // Legacy schedules remain in storage but never run after reload.
+ await page.evaluate(({chatId})=>{const key='atmos.workspace.v1',s=JSON.parse(localStorage.getItem(key));s.schedules=[{id:'legacy-schedule',chatId,name:'旧任务',prompt:'Check',profileId:s.profileId,frequency:'daily',timezone:'Asia/Shanghai',at:'09:00',weekday:0,day:1,month:1,paused:false,next:Date.now()-60000,notifySuccess:true,notifyFailure:true}];localStorage.setItem(key,JSON.stringify(s))},{chatId:clone.id});
+ const beforeReload=requests.length;await page.reload();await page.waitForTimeout(5500);assert.equal(requests.length,beforeReload);assert.equal(await page.getByTitle('对话自动化设置').count(),0);assert.equal(await page.locator('nav').getByRole('button',{name:'定时任务',exact:true}).count(),0);
  page.once('dialog',d=>d.accept('测试文件夹'));await page.getByRole('button',{name:'创建文件夹',exact:true}).click();
+ assert.equal((await state()).schedules,undefined);
  const folderId=(await state()).folders[0].id;
  await page.locator('.recent-list').getByRole('button',{name:'计数器 · 副本',exact:true}).click();
  await page.getByLabel('对话文件夹',{exact:true}).selectOption(folderId);
@@ -79,5 +70,5 @@ try{
  await page.locator('nav').getByRole('button',{name:'首页',exact:true}).click();
  await page.setViewportSize({width:390,height:844});await page.reload();await page.screenshot({path:output+'/mobile.png',fullPage:true});
  assert.equal(errors.length,0,'Browser runtime errors: '+errors.join('; '));
- console.log(JSON.stringify({passed:true,checks:['import','interactive preview','opaque-origin isolation','reload persistence','seeded export','empty export','standalone HTML persistence','generation protocol fixture','version restoration','editable plan confirmation','real publication','public seeded viewer','clone isolation','schedule pause/resume/delete','read-only timed run','missed-run handling','folder move and conversation listing','new conversation in folder','mobile layout'],screenshots:output,realModelCalls:0},null,2));
+ console.log(JSON.stringify({passed:true,checks:['import','interactive preview','opaque-origin isolation','reload persistence','seeded export','empty export','standalone HTML persistence','generation protocol fixture','version restoration','editable plan confirmation','real publication','public seeded viewer','clone isolation','legacy schedules removed and inactive','folder move and conversation listing','new conversation in folder','mobile layout'],screenshots:output,realModelCalls:0},null,2));
 }finally{await browser.close()}
